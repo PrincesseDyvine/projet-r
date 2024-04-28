@@ -116,3 +116,5 @@ View(jointure)
 jointure %>% group_by(CustomerID)
 # somme de montant total
 jointure %>% group_by(CustomerCategory) %>% summarise(sum(montantTotal, na.rm = T), moyenne = mean(montantTotal, na.rm = T ),nombre = n())
+
+
