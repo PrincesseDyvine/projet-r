@@ -1,0 +1,256 @@
+---
+title: "jour_6_formation_rstudio"
+format: html
+editor: visual
+---
+
+# Regression logistique
+
+```{r}
+df <- read.csv("/Users/Mega-Pc/Desktop/Formation_Rstudio/titanic.csv")
+
+View(df)
+
+```
+
+## Preprocessing
+
+```{r}
+install.packages("caret")
+library(caret)
+```
+
+```{r}
+summary(df)
+# imputer les valeurs manquantes par la moyenne
+df$Age[is.na(df$Age)] <- mean(df$Age,na.rm = T)
+```
+
+```{r}
+str(df)
+df$Survived <- as.factor(df$Survived)
+df$Sex <- as.factor(df$Sex)
+df$Pclass <- as.factor(df$Pclass)
+```
+
+## Diviser la base de donnés en deux
+
+#### la base d'apprentissage 70% de la base totale
+
+#### la base test 30%
+
+```{r}
+df <- df[,c(2,3,5,6,7,8,10)]
+set.seed(123) # assurer la reproductivité de notre code
+index <- createDataPartition(df$Survived,p= 0.7, list = F)
+```
+
+```{r}
+base_train <- df[index,]
+base_test <- df[-index,]
+```
+
+```{r}
+# autre option
+index <- sample(df$Survived, 0.7*nrow(df))
+```
+
+## regression logistique
+
+```{r}
+# Modèle logistique avec toutes les variables
+model_logistique <- glm(Survived ~ Pclass + Sex + Age + SibSp + Parch + Fare, family = binomial, data = base_train)
+
+
+
+```
+
+```{r}
+summary(model_logistique)
+```
+
+## Test de la significativité d'un modele de regression logistique
+
+```{r}
+anova(model_logistique,test = "Chisq")
+```
+
+```{r}
+# Significativité globale du modèle
+ G2 = model_logistique$null.deviance-model_logistique$deviance
+ 
+  1-pchisq(G2,df=1)
+  
+```
+
+## Prediction sur une nouvelle base
+
+```{r}
+prediction <- predict(model_logistique, type = "response")
+prediction
+```
+
+```{r}
+install.packages("pROC")
+library(pROC)
+```
+
+```{r}
+prediction <- predict(model_logistique, newdata = base_test[,-1],type = "response")
+
+prediction
+```
+
+```{r}
+roc_obj <- roc(base_test$Survived, prediction, levels=c("0", "1"))
+print(auc(roc_obj))
+plot(roc_obj, main="Courbe ROC")
+```
+
+```{r}
+roc_resultat <- roc(response = base_test$Survived, predictor = prediction)
+auc_resultat <- auc(roc_resultat)
+auc_resultat
+```
+
+## Prediction base d'apprentissage
+
+```{r}
+prediction <- predict(model_logistique,type = "response")
+prediction
+```
+
+```{r}
+roc_obj <- roc(base_train$Survived, prediction, levels=c("0", "1"))
+print(auc(roc_obj))
+plot(roc_obj, main="Courbe ROC")
+
+roc_resultat <- roc(response = base_train$Survived, predictor = prediction)
+auc_resultat <- auc(roc_resultat)
+auc_resultat
+```
+
+# Random forest 
+
+```{r}
+install.packages("randomForest")
+library(randomForest)
+```
+
+```{r}
+# il est conseillé de choisir 500
+model_rf <- randomForest(Survived ~ ., data=base_train, importance=TRUE,
+                        ntree=500)
+model_rf
+```
+
+```{r}
+# Importance des variables
+importance_var <- importance(model_rf)
+print(importance_var)
+```
+
+```{r}
+varImpPlot(model_rf)
+```
+
+```{r}
+plot(model_rf)
+```
+
+```{r}
+prediction_train <-  predict(model_rf, type = "prob")[,2]
+prediction_test <- predict(model_rf, newdata = base_test, type = "prob")[,2]
+```
+
+```{r}
+install.packages("pROC")
+library(pROC)
+
+roc_obj <- roc(base_train$Survived, prediction_train, levels = c("0", "1"))
+
+# Affichez l'AUC
+print(auc(roc_obj))
+
+# Tracez la courbe ROC
+plot(roc_obj, main = "Courbe ROC")
+
+```
+
+## Optimisation des parametre de random forest
+
+```{r}
+install.packages("caret")
+library(caret)
+
+# Définition des paramètres de validation croisée
+control <- trainControl(method = "cv", number = 5, search = "grid")
+
+```
+
+```{r}
+# Grid de paramètres à tester
+tunegrid <- expand.grid(.mtry=c(1, 2, 3, 4, 5))
+
+```
+
+```{r}
+# Entraînement du modèle avec validation croisée et recherche des meilleurs hyperparamètres
+rf_model <- train(Survived ~ ., data=base_train, method="rf", trControl=control, tuneGrid=tunegrid, ntree=500)
+```
+
+```{r}
+# Meilleurs paramètres trouvés
+print(rf_model$bestTune)
+```
+
+```{r}
+library(randomForest)
+library(ggplot2)
+# Entraînement direct avec randomForest pour accès à l'erreur OOB
+rf_model_direct <- randomForest(Survived ~ ., data=base_train, mtry=rf_model$bestTune$mtry, ntree=500)
+```
+
+```{r}
+plot(rf_model_direct)
+
+# Importance des variables
+importance <- varImp(rf_model, scale=FALSE)
+print(importance)
+
+```
+
+```{r}
+# Prédiction sur l'ensemble de test
+predictions <- predict(rf_model, newdata=base_test)
+```
+
+```{r}
+library(pROC)
+# Calcul de l'AUC et tracé de la courbe ROC
+prob_predictions <- predict(rf_model, newdata=base_test, type="prob")
+roc_obj <- roc(base_test$Survived, prob_predictions[,2], levels=c("0", "1"))
+print(auc(roc_obj))
+plot(roc_obj, main="Courbe ROC")
+```
+
+## Quarto
+
+Quarto enables you to weave together content and executable code into a finished document. To learn more about Quarto see <https://quarto.org>.
+
+## Running Code
+
+When you click the **Render** button a document will be generated that includes both content and the output of embedded code. You can embed code like this:
+
+```{r}
+1 + 1
+```
+
+You can add options to executable code like this
+
+```{r}
+#| echo: false
+2 * 2
+```
+
+The `echo: false` option disables the printing of code (only output is displayed).
